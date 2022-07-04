@@ -1,13 +1,16 @@
-ci:
-  autofix_prs: false
-
 repos:
+- repo: https://github.com/mwouts/jupytext
+  rev: v1.13.7
+  hooks:
+  - id: jupytext
+    files: ^examples/.+\.ipynb$
+    args: ["--sync"]
 - repo: https://github.com/psf/black
-  rev: 24.4.2
+  rev: 22.3.0
   hooks:
     - id: black-jupyter
 - repo: https://github.com/nbQA-dev/nbQA
-  rev: 1.8.5
+  rev: 1.1.0
   hooks:
     - id: nbqa-isort
       additional_dependencies: [isort==5.6.4]
@@ -15,7 +18,7 @@ repos:
       additional_dependencies: [pyupgrade==2.7.4]
       args: [--py37-plus]
 - repo: https://github.com/MarcoGorelli/madforhooks
-  rev: 0.4.1
+  rev: 0.3.0
   hooks:
     - id: check-execution-order
       args: [--strict]
@@ -23,6 +26,7 @@ repos:
             (?x)^
             ^examples/ode_models/ODE_with_manual_gradients\.ipynb$
             |examples/samplers/DEMetropolisZ_EfficiencyComparison\.ipynb$
+            |examples/gaussian_processes/GP-Latent\.ipynb$
             |examples/gaussian_processes/GP-MaunaLoa2\.ipynb$
             |examples/samplers/MLDA_gravity_surveying\.ipynb$
             |examples/howto/sampling_callback\.ipynb$
@@ -32,10 +36,11 @@ repos:
             |examples/gaussian_processes/GP-TProcess\.ipynb$
             |examples/mixture_models/dependent_density_regression\.ipynb$
             |examples/gaussian_processes/GP-Heteroskedastic\.ipynb$
+            |examples/gaussian_processes/GP-MeansAndCovs\.ipynb$
             |examples/samplers/MLDA_variance_reduction_linear_regression\.ipynb$
 
 - repo: https://github.com/FlamingTempura/bibtex-tidy
-  rev: v1.11.0
+  rev: v1.8.5
   hooks:
     - id: bibtex-tidy
       files: examples/references.bib
@@ -49,17 +54,11 @@ repos:
       minimum_pre_commit_version: 2.8.0
       name: Check notebooks have watermark (see Jupyter style guide from PyMC docs)
       types: [jupyter]
-    - id: notebook_name
-      entry: '\(notebook_name\)='
-      language: pygrep
-      minimum_pre_commit_version: 2.8.0
-      name: Check notebooks do not use literally notebook_name as target
-      types: [jupyter]
-    - id: no-references-as-links
-      name: Check no references that should be sphinx cross-references are urls
+    - id: no-internal-links
+      name: Check no internal links are in the docs
       description: >-
-        'A quick check to prevent urls pointing to pymc docs or other sphinx built docs like arviz, numpy, scipy...'
-      files: ^examples/.+\.ipynb$
+        'A quick check to prevent urls pointing to pymc docs'
+      files: ^examples/
       exclude: >
           (?x)(index.md|
                404.md|
@@ -69,10 +68,12 @@ repos:
                examples/case_studies/blackbox_external_likelihood.ipynb|
                examples/case_studies/blackbox_external_likelihood_numpy.ipynb|
                examples/case_studies/item_response_nba.ipynb|
+               examples/diagnostics_and_criticism/sampler-stats.ipynb|
                examples/gaussian_processes/GP-MaunaLoa2.ipynb|
                examples/generalized_linear_models/GLM-logistic.ipynb|
                examples/generalized_linear_models/GLM-out-of-sample-predictions.ipynb|
                examples/generalized_linear_models/GLM-poisson-regression.ipynb|
+               examples/generalized_linear_models/GLM-robust.ipynb|
                examples/generalized_linear_models/GLM-rolling-regression.ipynb|
                examples/generalized_linear_models/GLM-simpsons-paradox.ipynb|
                examples/howto/api_quickstart.ipynb|
@@ -81,10 +82,11 @@ repos:
                examples/samplers/SMC-ABC_Lotka-Volterra_example.ipynb|
                examples/splines/spline.ipynb|
                examples/survival_analysis/censored_data.ipynb|
-               examples/survival_analysis/weibull_aft.ipynb|
-               examples/howto/custom_distribution.ipynb)
+               examples/survival_analysis/weibull_aft.ipynb)
       entry: >
           (?x)(arviz-devs.github.io|
+               aesara.readthedocs.io|
+               aeppl.readthedocs.io|
                pymc-experimental.readthedocs.io|
                docs.pymc.io|
                numpy.org/doc|
@@ -92,15 +94,18 @@ repos:
                docs.python.org|
                xarray.pydata.org
                python.arviz.org|
-               pytensor.readthedocs.io|
-               docs.xarray.dev|
-               www.pymc.io|
-               docs.scipy.org/doc)
+               docs.xarray.dev)
       language: pygrep
       types_or: [markdown, rst, jupyter]
 - repo: https://github.com/mwouts/jupytext
-  rev: v1.16.3
+  rev: v1.13.7
   hooks:
   - id: jupytext
     files: ^examples/.+\.ipynb$
-    args: [--from, ipynb, --to, ".myst.md:myst"]
+    args: ["--sync"]
+- repo: https://github.com/codespell-project/codespell
+  rev: v2.1.0
+  hooks:
+  - id: codespell
+    files: myst_nbs/
+    args: ["--write-changes", "--ignore-words-list", "hist,fpr,fro,lik"]
