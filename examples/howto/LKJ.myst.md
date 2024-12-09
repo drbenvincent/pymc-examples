@@ -12,6 +12,7 @@ kernelspec:
 
 +++ {"id": "XShKDkNir2PX"}
 
+(lkj_prior_for_multivariate_normal)=
 # LKJ Cholesky Covariance Priors for Multivariate Normal Models
 
 +++ {"id": "QxSKBbjKr2PZ"}
@@ -130,7 +131,7 @@ packed_L.eval()
 
 +++ {"id": "59FtijDir2Pe"}
 
-We use [expand_packed_triangular](../api/math.rst) to transform this vector into the lower triangular matrix $\mathbf{L}$, which appears in the Cholesky decomposition $\Sigma = \mathbf{L} \mathbf{L}^{\top}$.
+We use {func}`expand_packed_triangular <pymc.expand_packed_triangular>` to transform this vector into the lower triangular matrix $\mathbf{L}$, which appears in the Cholesky decomposition $\Sigma = \mathbf{L} \mathbf{L}^{\top}$.
 
 ```{code-cell} ipython3
 ---
