@@ -5,7 +5,7 @@ jupytext:
     format_name: myst
     format_version: 0.13
 kernelspec:
-  display_name: Python 3 (ipykernel)
+  display_name: pymc
   language: python
   name: python3
 myst:
@@ -14,7 +14,7 @@ myst:
     pip_dependencies: pymc-bart
 ---
 
-+++ {"editable": true, "slideshow": {"slide_type": ""}}
++++ {"slideshow": {"slide_type": ""}}
 
 (bart_categorical)=
 # Categorical regression
@@ -35,7 +35,7 @@ In this example, we will model outcomes with more than two categories.
 import os
 import warnings
 
-import arviz as az
+import arviz.preview as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -43,13 +43,15 @@ import pymc as pm
 import pymc_bart as pmb
 import seaborn as sns
 
+from scipy.special import softmax
+
 warnings.simplefilter(action="ignore", category=FutureWarning)
 ```
 
 ```{code-cell} ipython3
 # set formats
 RANDOM_SEED = 8457
-az.style.use("arviz-darkgrid")
+az.style.use("arviz-variat")
 ```
 
 ## Hawks dataset  
@@ -132,70 +134,83 @@ with model_hawks:
 
 ### Variable Importance  
 
-It may be that some of the input variables are not informative for classifying by species, so in the interest of parsimony and in reducing the computational cost of model estimation, it is useful to quantify the importance of each variable in the dataset. PyMC-BART provides the function {func}`~pymc_bart.plot_variable_importance()`, which generates a plot that shows on his x-axis the number of covariables and on the y-axis the R$^2$ (the square of the Pearson correlation coefficient) between the predictions made for the full model (all variables included) and the restricted models, those with only a subset of the variables. The error bars represent the 94 % HDI from the posterior predictive distribution. 
+It may be that some of the input variables are not informative for classifying by species, so in the interest of parsimony and in reducing the computational cost of model estimation, it is useful to quantify the importance of each variable in the dataset. PyMC-BART provides the function {func}`~pymc_bart.compute_variable_importance()` and {func}`~pymc_bart.plot_variable_importance()`, that work together to generate a plot that shows on his x-axis the number of covariables and on the y-axis the R$^2$ between the predictions made for the full model (all variables included) and the restricted models, those with only a subset of the variables. The error bars represent the 94 % HDI from the posterior predictive distribution.
+
+```{code-cell} ipython3
+idata.posterior_predictive
+```
 
 ```{code-cell} ipython3
 ---
-editable: true
 slideshow:
   slide_type: ''
 ---
-pmb.plot_variable_importance(idata, μ, x_0, method="VI", random_seed=RANDOM_SEED);
+vi_results = pmb.compute_variable_importance(idata, μ, x_0, method="VI", random_seed=RANDOM_SEED)
+pmb.plot_variable_importance(vi_results);
 ```
 
-It can be observed that with the covariables `Hallux`, `Culmen`, and `Wing` we achieve the same R$^2$ value that we obtained with all the covariables, this is that the last two covariables contribute less than the other three to the classification. One thing we have to take into account in this is that the HDI is quite wide, which gives us less precision on the results, later we are going to see a way to reduce this.    
+It can be observed that with the covariables `Hallux`, `Culmen`, and `Wing` we achieve the same $R^2$ value that we obtained with all the covariables, this is that the last two covariables contribute less than the other three to the classification. One thing we have to take into account in this is that the HDI is quite wide, which gives us less precision on the results; later we are going to see a way to reduce this.
 
-+++
+We can also plot the scatter plot of the submodels' predictions to the full model's predictions to get an idea of how each new covariate improves the submodel's predictions.
+
+```{code-cell} ipython3
+axes = pmb.plot_scatter_submodels(
+    vi_results, grid=(5, 3), figsize=(12, 14), plot_kwargs={"alpha_scatter": 0.05}
+)
+plt.suptitle("Comparison of submodels' predictions to full model's\n", fontsize=18)
+for ax, cat in zip(axes, np.repeat(species, len(vi_results["labels"]))):
+    ax.set(title=f"Species {cat}")
+```
 
 ### Partial Dependence Plot
 
-Let's check the behavior of each covariable for each species with `pmb.plot_pdp()`, which shows the marginal effect a covariate has on the predicted variable, while we average over all the other covariates.  
+Let's check the behavior of each covariable for each species with `pmb.plot_pdp()`, which shows the marginal effect a covariate has on the predicted variable, while we average over all the other covariates. Since our response variable is categorical, we'll pass `softmax` as the inverse link function to `plot_pdp`. 
+
+You can see we have to be careful with the `softmax` function, because it's not vectorized: it considers relationships between elements, so the specific axis along which we apply it matters. By default, scipy applies to all axes, but we want to apply it to the last axis, since that's where the categories are. To make sure of that, we use `np.apply_along_axis` and pass it in a lambda function.
 
 ```{code-cell} ipython3
-pmb.plot_pdp(μ, X=x_0, Y=y_0, grid=(5, 3), figsize=(6, 9));
+axes = pmb.plot_pdp(
+    μ,
+    X=x_0,
+    Y=y_0,
+    grid=(5, 3),
+    figsize=(12, 12),
+    func=lambda x: np.apply_along_axis(softmax, axis=-1, arr=x),
+)
+plt.suptitle("Partial Dependence Plots\n", fontsize=18)
+for (i, ax), cat in zip(enumerate(axes), np.tile(species, len(vi_results["labels"]))):
+    ax.set(title=f"Species {cat}")
 ```
 
-The pdp plot, together with the Variable Importance plot, confirms that `Tail` is the covariable with the smaller effect over the predicted variable. In the Variable Importance plot `Tail` is the last covariable to be added and does not improve the result, in the pdp plot `Tail` has the flattest response. For the rest of the covariables in this plot, it's hard to see which of them have more effect over the predicted variable, because they have great variability, showed in the HDI wide, same as before later we are going to see a way to reduce this variability. Finally, some variability depends on the amount of data for each species, which we can see  in the `counts` from one of the covariables using Pandas `.describe()` and grouping the data from "Species" with `.groupby("Species")`.  
+The Partial Dependence Plot, together with the Variable Importance plot, confirms that `Tail` is the covariable with the smaller effect over the predicted variable: in the Variable Importance plot, `Tail` is the last covariate to be added and does not improve the result; in the PDP plot `Tail` has the flattest response. 
 
-+++
+For the rest of the covariate in this plot, it's hard to see which of them have more effect over the predicted variable, because they have great variability, showed in the HDI width. 
+
+Finally, some variability depends on the amount of data for each species, which we can see in the `counts` of each covariable for each species:
+
+```{code-cell} ipython3
+Hawks.groupby("Species").count()
+```
 
 ### Predicted vs Observed  
 
-Now we are going to compare the predicted data with the observed data to evaluate the fit of the model, we do this with the Arviz function `az.plot_ppc()`.  
+We are going to evaluate the model by comparing the predicted data against the observed data. This can be tricky to do with categorical data (and binary or ordinal data as well). For this reason we use PAV-adjusted calibration plots as described by {cite:t}`dimitriadis2021` and in a Bayesian context by {cite:t}`säilynoja2025`. 
+
+In these plots the observed events are replaced with conditional event probabilities (CEP), which is the probability that a certain event occurs given that the classifier has assigned a specific predicted probability. 
+
+We can esily generate this type of plots with the ArviZ's function `az.plot_ppc_pava()`, as this function also works for binary and ordinal data we need to specify `data_type="categorical"`.  You can read more about these plots [here](https://arviz-devs.github.io/EABM/Chapters/Prior_posterior_predictive_checks.html#posterior-predictive-checks-for-discrete-data).
 
 ```{code-cell} ipython3
-ax = az.plot_ppc(idata, kind="kde", num_pp_samples=200, random_seed=123)
-# plot aesthetics
-ax.set_ylim(0, 0.7)
-ax.set_yticks([0, 0.2, 0.4, 0.6])
-ax.set_ylabel("Probability")
-ax.set_xticks([0.5, 1.5, 2.5])
-ax.set_xticklabels(["CH", "RT", "SS"])
-ax.set_xlabel("Species");
+az.plot_ppc_pava(idata, data_type="categorical");
 ```
 
-We can see a good agreement between the observed data (black line) and those predicted by the model (blue and orange lines). As we mentioned before, the difference in the values between species is influenced by the amount of data for each one. Here there is no observed dispersion in the predicted data as we saw in the previous two plots.  
+Each subplot is a category vs the others. The ideal calibration plot is a diagonal line, represented by the gray dashed line, where the predicted probabilities are equal to the observed frequencies. If the line is above the diagonal, the model is underestimating the probabilities, and if the line is below the diagonal, the model is overestimating the probabilities.
 
 +++
 
-Below we see that the in-sample predictions provide very good agreement with the observations.  
-
-```{code-cell} ipython3
-np.mean((idata.posterior_predictive["y"] - y_0) == 0) * 100
-```
-
-```{code-cell} ipython3
-all = 0
-for i in range(3):
-    perct_per_class = np.mean(idata.posterior_predictive["y"].where(y_0 == i) == i) * 100
-    all += perct_per_class
-    print(perct_per_class)
-all
-```
-
 So far we have a very good result concerning the classification of the species based on the 5 covariables. However, if we want to select a subset of covariable to perform future classifications is not very clear which of them to select. Maybe something sure is that `Tail` could be eliminated. At the beginning when we plot the distribution of each covariable we said that the most important variables to make the classification could be `Wing`, `Weight` and, `Culmen`, nevertheless after running the model we saw that `Hallux`, `Culmen` and, `Wing`, proved to be the most important ones.
 
-Unfortunatelly, the partial dependence plots show a very wide dispersion, making results look suspicious. One way to reduce this variability is adjusting independent trees, below we will see how to do this and get a more accurate result. 
+Unfortunately, the partial dependence plots show a very wide dispersion, making results look suspicious. One way to reduce this variability is adjusting independent trees, below we will see how to do this and get a more accurate result. 
 
 +++
 
@@ -215,46 +230,43 @@ with pm.Model(coords=coords) as model_t:
 Now we are going to reproduce the same analyses as before.  
 
 ```{code-cell} ipython3
-pmb.plot_variable_importance(idata_t, μ_t, x_0, method="VI", random_seed=RANDOM_SEED);
+vi_results = pmb.compute_variable_importance(
+    idata_t, μ_t, x_0, method="VI", random_seed=RANDOM_SEED
+)
+pmb.plot_variable_importance(vi_results);
 ```
 
 ```{code-cell} ipython3
-pmb.plot_pdp(μ_t, X=x_0, Y=y_0, grid=(5, 3), figsize=(6, 9));
+axes = pmb.plot_pdp(
+    μ_t,
+    X=x_0,
+    Y=y_0,
+    grid=(5, 3),
+    figsize=(12, 12),
+    func=lambda x: np.apply_along_axis(softmax, axis=-1, arr=x),
+)
+plt.suptitle("Partial Dependence Plots\n", fontsize=18)
+for (i, ax), cat in zip(enumerate(axes), np.tile(species, len(vi_results["labels"]))):
+    ax.set(title=f"Species {cat}")
 ```
 
-Comparing these two plots with the previous ones shows a marked reduction in the variance for each one. In the case of `pmb.plot_variable_importance()` there are smallers error bands with an R$^{2}$ value more close to 1. And for `pm.plot_pdp()` we can see thinner bands and a reduction in the limits on the y-axis, this is a representation of the reduction of the uncertainty due to adjusting the trees separately. Another benefit of this is that is more visible the behavior of each covariable for each one of the species.   
+Comparing these two plots with the previous ones shows a marked reduction in the variance for each one. In the case of `pmb.plot_variable_importance()` there are smallers error bands with an $R^{2}$ value closer to 1. And for `pmb.plot_pdp()` we can see thinner HDI bands. This is a representation of the reduction of the uncertainty due to adjusting the trees separately. Another benefit of this is that the behavior of each covariable for each one of the species is more visible.
 
 With all these together, we can select `Hallux`, `Culmen`, and, `Wing` as covariables to make the classification.
 
 +++
 
-Concerning the comparison between observed and predicted data, we obtain the same good result with less uncertainty for the predicted values (blue lines). And the same counts for the in-sample comparison.  
+Concerning the comparison between observed and predicted data, we can see that the model shows better calibration, as the lines are closer to the diagonal and the bands are in general less wide.
 
 ```{code-cell} ipython3
-ax = az.plot_ppc(idata_t, kind="kde", num_pp_samples=100, random_seed=123)
-ax.set_ylim(0, 0.7)
-ax.set_yticks([0, 0.2, 0.4, 0.6])
-ax.set_ylabel("Probability")
-ax.set_xticks([0.5, 1.5, 2.5])
-ax.set_xticklabels(["CH", "RT", "SS"])
-ax.set_xlabel("Species");
-```
-
-```{code-cell} ipython3
-np.mean((idata_t.posterior_predictive["y"] - y_0) == 0) * 100
-```
-
-```{code-cell} ipython3
-all = 0
-for i in range(3):
-    perct_per_class = np.mean(idata_t.posterior_predictive["y"].where(y_0 == i) == i) * 100
-    all += perct_per_class
-    print(perct_per_class)
-all
+az.plot_ppc_pava(idata_t, data_type="categorical");
 ```
 
 ## Authors
-- Authored by [Pablo Garay](https://github.com/PabloGGaray) and [Osvaldo Martin](https://aloctavodia.github.io/) in May, 2024  
+- Authored by [Pablo Garay](https://github.com/PabloGGaray) and [Osvaldo Martin](https://aloctavodia.github.io/) in May, 2024
+- Updated by Osvaldo Martin in Dec, 2024
+- Expanded by [Alex Andorra](https://github.com/AlexAndorra) in Feb, 2025
+- Updated by Osvaldo Martin in Dec, 2025
 
 +++
 

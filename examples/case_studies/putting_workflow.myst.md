@@ -5,7 +5,7 @@ jupytext:
     format_name: myst
     format_version: 0.13
 kernelspec:
-  display_name: pymc_env
+  display_name: eabm
   language: python
   name: python3
 ---
@@ -29,7 +29,7 @@ We use a data set from "Statistics: A Bayesian Perspective" {cite:p}`berry1996st
 ```{code-cell} ipython3
 import io
 
-import arviz as az
+import arviz.preview as az
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -44,7 +44,7 @@ from xarray_einstats.stats import XrContinuousRV
 
 ```{code-cell} ipython3
 RANDOM_SEED = 8927
-az.style.use("arviz-darkgrid")
+az.style.use("arviz-variat")
 ```
 
 ```{code-cell} ipython3
@@ -82,7 +82,7 @@ We start plotting the data to get a better idea of how it looks. The hidden cell
 ```{code-cell} ipython3
 :tags: [hide-input]
 
-def plot_golf_data(golf_data, ax=None, color="C0"):
+def plot_golf_data(golf_data, ax=None, color="k"):
     """Utility function to standardize a pretty plotting of the golf data."""
     if ax is None:
         _, ax = plt.subplots()
@@ -128,13 +128,13 @@ p(\text{success}) = \operatorname{logit}^{-1}(a \cdot \text{distance} + b) \\
 \text{num. successes} \sim \operatorname{Binomial}(\text{tries}, p(\text{success}))
 $$
 
-Here is how to write that model in PyMC. We use underscore appendices in our model variables to avoid polluting the namespace. We also use {class}`pymc.MutableData` to let us swap out the data later, when we will work with a newer data set.
+Here is how to write that model in PyMC. We use underscore appendices in our model variables to avoid polluting the namespace. We also use {class}`pymc.Data` to let us swap out the data later, when we will work with a newer data set.
 
 ```{code-cell} ipython3
 with pm.Model() as logit_model:
-    distance_ = pm.MutableData("distance", golf_data["distance"], dims="obs_id")
-    tries_ = pm.MutableData("tries", golf_data["tries"], dims="obs_id")
-    successes_ = pm.MutableData("successes", golf_data["successes"], dims="obs_id")
+    distance_ = pm.Data("distance", golf_data["distance"], dims="obs_id")
+    tries_ = pm.Data("tries", golf_data["tries"], dims="obs_id")
+    successes_ = pm.Data("successes", golf_data["successes"], dims="obs_id")
 
     a_ = pm.Normal("a")
     b_ = pm.Normal("b")
@@ -174,7 +174,7 @@ logit_post = az.extract(logit_trace, num_samples=400)
 logit_ppc = az.extract(logit_trace, group="posterior_predictive", num_samples=400)
 const_data = logit_trace["constant_data"]
 
-logit_ppc_success = logit_ppc["success"] / const_data["tries"]
+logit_ppc_success = logit_ppc / const_data["tries"]
 
 # Plotting
 ax = plot_golf_data(golf_data)
@@ -271,9 +271,9 @@ def phi(x):
 
 
 with pm.Model() as angle_model:
-    distance_ = pm.MutableData("distance", golf_data["distance"], dims="obs_id")
-    tries_ = pm.MutableData("tries", golf_data["tries"], dims="obs_id")
-    successes_ = pm.MutableData("successes", golf_data["successes"], dims="obs_id")
+    distance_ = pm.Data("distance", golf_data["distance"], dims="obs_id")
+    tries_ = pm.Data("tries", golf_data["tries"], dims="obs_id")
+    successes_ = pm.Data("successes", golf_data["successes"], dims="obs_id")
 
     variance_of_shot = pm.HalfNormal("variance_of_shot")
     p_goes_in = pm.Deterministic(
@@ -512,9 +512,9 @@ DISTANCE_TOLERANCE = 3.0
 
 
 with pm.Model() as distance_angle_model:
-    distance_ = pm.MutableData("distance", new_golf_data["distance"], dims="obs_id")
-    tries_ = pm.MutableData("tries", new_golf_data["tries"], dims="obs_id")
-    successes_ = pm.MutableData("successes", new_golf_data["successes"], dims="obs_id")
+    distance_ = pm.Data("distance", new_golf_data["distance"], dims="obs_id")
+    tries_ = pm.Data("tries", new_golf_data["tries"], dims="obs_id")
+    successes_ = pm.Data("successes", new_golf_data["successes"], dims="obs_id")
 
     variance_of_shot = pm.HalfNormal("variance_of_shot")
     variance_of_distance = pm.HalfNormal("variance_of_distance")
@@ -619,10 +619,10 @@ We follow approach 3, as in the Stan case study, and leave 1 as an exercise.
 
 ```{code-cell} ipython3
 with pm.Model() as disp_distance_angle_model:
-    distance_ = pm.MutableData("distance", new_golf_data["distance"], dims="obs_id")
-    tries_ = pm.MutableData("tries", new_golf_data["tries"], dims="obs_id")
-    successes_ = pm.MutableData("successes", new_golf_data["successes"], dims="obs_id")
-    obs_prop_ = pm.MutableData(
+    distance_ = pm.Data("distance", new_golf_data["distance"], dims="obs_id")
+    tries_ = pm.Data("tries", new_golf_data["tries"], dims="obs_id")
+    successes_ = pm.Data("successes", new_golf_data["successes"], dims="obs_id")
+    obs_prop_ = pm.Data(
         "obs_prop", new_golf_data["successes"] / new_golf_data["tries"], dims="obs_id"
     )
 
@@ -693,14 +693,10 @@ This new model does better between 10 and 30 feet, as we can also see using the 
 ```{code-cell} ipython3
 const_data = distance_angle_trace.constant_data
 old_pp = az.extract(distance_angle_trace, group="posterior_predictive")
-old_residuals = 100 * ((const_data["successes"] - old_pp["success"]) / const_data["tries"]).mean(
-    dim="sample"
-)
+old_residuals = 100 * ((const_data["successes"] - old_pp) / const_data["tries"]).mean(dim="sample")
 
 pp = az.extract(disp_distance_angle_trace, group="posterior_predictive")
-residuals = 100 * (const_data["successes"] / const_data["tries"] - pp["p_success"]).mean(
-    dim="sample"
-)
+residuals = 100 * (const_data["successes"] / const_data["tries"] - pp).mean(dim="sample")
 
 fig, ax = plt.subplots()
 
@@ -834,6 +830,7 @@ fig.suptitle("Simulated number of putts from\na few distances");
 * Updated by Marco Gorelli ([pymc-examples#39](https://github.com/pymc-devs/pymc-examples/pull/39))
 * Updated by Oriol Abril-Pla to use PyMC v4 and xarray-einstats
 * Updated by [Benjamin T. Vincent](https://github.com/drbenvincent) to use `az.extract` in February 2023 ([pymc-examples#522](https://github.com/pymc-devs/pymc-examples/pull/522))
+* Updated by Osvaldo Martin in January 2026
 
 +++
 
@@ -849,7 +846,7 @@ fig.suptitle("Simulated number of putts from\na few distances");
 
 ```{code-cell} ipython3
 %load_ext watermark
-%watermark -n -u -v -iv -w -p aeppl,xarray_einstats
+%watermark -n -u -v -iv -w -p xarray_einstats
 ```
 
 :::{include} ../page_footer.md

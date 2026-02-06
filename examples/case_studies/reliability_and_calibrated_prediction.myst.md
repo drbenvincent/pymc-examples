@@ -5,7 +5,7 @@ jupytext:
     format_name: myst
     format_version: 0.13
 kernelspec:
-  display_name: Python 3 (ipykernel)
+  display_name: eabm
   language: python
   name: python3
 myst:
@@ -26,19 +26,18 @@ myst:
 :::
 
 ```{code-cell} ipython3
-import os
 import random
 
 from io import StringIO
 
-import arviz as az
+import arviz.preview as az
 import matplotlib.cm as cm
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pymc as pm
 
-from lifelines import KaplanMeierFitter, LogNormalFitter, WeibullFitter
+from lifelines import LogNormalFitter, WeibullFitter
 from lifelines.utils import survival_table_from_events
 from scipy.stats import binom, lognorm, norm, weibull_min
 ```
@@ -46,7 +45,7 @@ from scipy.stats import binom, lognorm, norm, weibull_min
 ```{code-cell} ipython3
 RANDOM_SEED = 8927
 rng = np.random.default_rng(RANDOM_SEED)
-az.style.use("arviz-darkgrid")
+az.style.use("arviz-variat")
 %config InlineBackend.figure_format = 'retina'
 ```
 
@@ -232,7 +231,7 @@ def make_actuarial_table(actuarial_table):
     actuarial_table["CI_95_ub"] = np.where(
         actuarial_table["CI_95_ub"] > 1, 1, actuarial_table["CI_95_ub"]
     )
-    actuarial_table["ploting_position"] = actuarial_table["F_hat"].rolling(1).median()
+    actuarial_table["plotting_position"] = actuarial_table["F_hat"].rolling(1).median()
     actuarial_table = logit_transform_interval(actuarial_table)
     return actuarial_table
 
@@ -345,7 +344,7 @@ def plot_cdfs(actuarial_table, dist_fits=True, ax=None, title="", xy=(3000, 0.5)
         lnf = LogNormalFitter().fit(item_period["t"] + 1e-25, item_period["failed"])
         wbf = WeibullFitter().fit(item_period["t"] + 1e-25, item_period["failed"])
     if ax is None:
-        fig, ax = plt.subplots(figsize=(20, 10))
+        _, ax = plt.subplots(figsize=(20, 10))
     ax.plot(
         actuarial_table["t"],
         actuarial_table["F_hat"],
@@ -743,7 +742,7 @@ ax.plot(
 )
 ax.scatter(
     np.log(actuarial_table_bearings["t"]),
-    norm.ppf(actuarial_table_bearings["ploting_position"]),
+    norm.ppf(actuarial_table_bearings["plotting_position"]),
     label="Non-Parametric CDF",
     color="black",
 )
@@ -806,7 +805,7 @@ ax2.plot(
 )
 ax2.scatter(
     np.log(actuarial_table_bearings["t"]),
-    sev_ppf(actuarial_table_bearings["ploting_position"]),
+    sev_ppf(actuarial_table_bearings["plotting_position"]),
     label="Non-Parametric CDF",
     color="black",
 )
@@ -866,12 +865,12 @@ We can see here how neither MLE fit covers the range of observed data.
 
 We've now seen how to model and visualise the parametric model fits to sparse reliability using a frequentist or MLE framework. We want to now show how the same style of inferences can be achieved in the Bayesian paradigm. 
 
-As in the MLE paradigm we need to model the censored liklihood. For most log-location distributions we've seen above the likelihood is expressed as a function of a combination of the distribution pdf $\phi$ and cdf $\Phi$ applied as appropriately depending on whether or not the data point was fully observed in the time window or censored. 
+As in the MLE paradigm we need to model the censored likelihood. For most log-location distributions we've seen above the likelihood is expressed as a function of a combination of the distribution pdf $\phi$ and cdf $\Phi$ applied as appropriately depending on whether or not the data point was fully observed in the time window or censored. 
 
 
 $$ L(\mu, \sigma) =  \prod_{i = 1}^{n} \Bigg(\dfrac{1}{\sigma t_{i}} \phi\Bigg[ \dfrac{log(t_{i}) - \mu}{\sigma}  \Bigg] \Bigg)^{\delta_{i}} \cdot \Bigg(1 - \Phi \Bigg[ \dfrac{log(t_{i}) - \mu}{\sigma} \Bigg]   \Bigg)^{1-\delta}$$
 
-where $\delta_{i}$ is an indicator for whether the observation is a faiure or a right censored observation. More complicated types of censoring can be included with similar modifications of the CDF depending on the nature of the censored observations.
+where $\delta_{i}$ is an indicator for whether the observation is a failure or a right censored observation. More complicated types of censoring can be included with similar modifications of the CDF depending on the nature of the censored observations.
 
 +++
 
@@ -922,11 +921,11 @@ idata
 ```
 
 ```{code-cell} ipython3
-az.plot_trace(idata, kind="rank_vlines");
+az.plot_rank_dist(idata);
 ```
 
 ```{code-cell} ipython3
-az.plot_trace(idata_informative, kind="rank_vlines");
+az.plot_rank_dist(idata_informative);
 ```
 
 ```{code-cell} ipython3
@@ -1175,6 +1174,7 @@ In particular we've seen how the MLE fits to our bearings data provide a decent 
 ## Authors
 
 * Authored by Nathaniel Forde on 9th of January 2022 ([pymc-examples#491](https://github.com/pymc-devs/pymc-examples/pull/491))
+* Updated by Osvaldo Martin on January 2026
 
 +++
 
